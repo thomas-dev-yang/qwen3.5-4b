@@ -1,0 +1,8 @@
+{
+  "default": [
+    {
+      "role": "user",
+      "content": "Write a minimal CUDA kernel that adds two float32 vectors."
+    }
+  ]
+}

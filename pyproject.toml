@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwen35-4b-lab"
+version = "0.1.0"
+description = "Differential testing and benchmarking harness for Qwen3.5-4B engine work."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "accelerate>=1,<2",
+  "huggingface-hub>=0.30,<2",
+  "numpy>=1.26,<2",
+  "safetensors>=0.5,<1",
+  "torch==2.4.0",
+  "transformers @ git+https://github.com/huggingface/transformers.git@63f32a8782cb70da3365acab16f2b67947737985",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+qwen35 = "qwen35_cli:main"
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.setuptools]
+py-modules = ["qwen35_cli", "workflows"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cuda_impl = ["csrc/*.cpp", "csrc/*.cu"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+markers = [
+  "integration: requires CUDA and the downloaded Qwen3.5-4B checkpoint",
+  "cuda_kernel: requires CUDA and an implemented C++/CUDA attention kernel",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

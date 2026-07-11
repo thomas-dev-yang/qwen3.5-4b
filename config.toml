@@ -1,0 +1,41 @@
+[model]
+repo_id = "Qwen/Qwen3.5-4B"
+revision = "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+local_dir = "models/Qwen3.5-4B"
+
+# These are assertions, not knobs. They stop a trace if the checkpoint changed.
+model_type = "qwen3_5"
+text_model_type = "qwen3_5_text"
+vocab_size = 248320
+hidden_size = 2560
+num_hidden_layers = 32
+full_attention_layers = [3, 7, 11, 15, 19, 23, 27, 31]
+num_attention_heads = 16
+num_key_value_heads = 4
+head_dim = 256
+
+[runtime]
+device = "cuda"
+dtype = "bfloat16"
+attention_backend = "eager"
+seed = 1234
+
+[trace]
+use_chat_template = true
+enable_thinking = false
+max_prefill_tokens = 128
+decode_steps = 4
+capture_cache = "full"
+capture_hidden_states = false
+
+[compare]
+logits_atol = 0.02
+logits_rtol = 0.02
+state_atol = 0.001
+state_rtol = 0.001
+
+[benchmark]
+prompt_lengths = [128, 512, 2048]
+decode_steps = 32
+warmup = 3
+repeats = 10
