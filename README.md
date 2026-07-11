@@ -68,6 +68,16 @@ Qwen also determines the projection weights, QK normalization, partial multi-axi
 Implement [attention.cu](src/cuda_impl/csrc/attention.cu), then run:
 
 ```bash
+./build-script.sh
+```
+
+This builds in the pinned RunPod CUDA image for H100 `sm_90`, writes the extension under `build/torch_extensions/`, and generates `compile_commands.json` with Bear.
+
+The project-root `.clangd` reads that compilation database automatically. `.clang-format` defines the C++/CUDA formatting style.
+
+Run the kernel comparison on the H100 with:
+
+```bash
 QWEN35_TEST_CUDA_KERNEL=1 \
   uv run --locked pytest tests/attention/test_cuda_attention.py
 ```

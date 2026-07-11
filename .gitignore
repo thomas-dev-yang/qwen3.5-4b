@@ -10,5 +10,6 @@ models/
 artifacts/
 *.tar.gz
 *.log
+compile_commands.json
 .env
 .huggingface/
