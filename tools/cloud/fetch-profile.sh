@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG_FILE="${CLOUD_CONFIG:-$SCRIPT_DIR/config.json}"
-REPORT="${1:-attention-decode.ncu-rep}"
+REPORT="${1:-*.ncu-rep}"
 LOCAL_DIR="${2:-$PROJECT_ROOT/artifacts/profiles}"
 
 mapfile -t CONFIG < <(
@@ -32,4 +32,8 @@ fi
 mkdir -p "$LOCAL_DIR"
 scp "$TARGET:$REMOTE_REPORT" "$LOCAL_DIR/"
 
-echo "Downloaded $REMOTE_REPORT to $LOCAL_DIR/$(basename "$REMOTE_REPORT")"
+if [[ "$REPORT" == "*.ncu-rep" ]]; then
+  echo "Downloaded all profiles from $TARGET to $LOCAL_DIR/"
+else
+  echo "Downloaded $REMOTE_REPORT to $LOCAL_DIR/$(basename "$REMOTE_REPORT")"
+fi
