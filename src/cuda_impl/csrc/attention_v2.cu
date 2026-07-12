@@ -1,9 +1,11 @@
 #include "attention_v2.cuh"
+
 #include <cfloat>
 
 #define QWEN35_QUERY_HEADS 16
 #define QWEN35_KV_HEADS 4
 #define QWEN35_HEAD_DIM 256
+#define NUM_THREADS_WARP 32
 #define QWEN35_KV_GROUPS (QWEN35_QUERY_HEADS / QWEN35_KV_HEADS)
 #define QWEN35_ATTENTION_SCALE 0.0625F
 
@@ -15,6 +17,15 @@
 //
 // One block owns one output vector. The threads must cooperate to reduce each
 // Q dot K score, update the online-softmax state, and accumulate V features.
+
+__device__ int lane() {
+  return threadIdx.x & 31;
+}
+
+__device__ int warp() {
+  return threadIdx.x >> 5;
+}
+
 __global__ void qwen35_attention_v2_kernel(Qwen35AttentionParams params) {
   const int query_token = blockIdx.x;
   const int query_head = blockIdx.y;
@@ -31,13 +42,11 @@ __global__ void qwen35_attention_v2_kernel(Qwen35AttentionParams params) {
   const int visible_key_tokens = cached_tokens + query_token + 1;
 
   const int query_offset =
-      ((batch * QWEN35_QUERY_HEADS + query_head) * params.query_tokens + query_token) * QWEN35_HEAD_DIM;
+      ((batch * QWEN35_QUERY_HEADS + query_head) * params.query_tokens + query_token) *
+      QWEN35_HEAD_DIM;
 
   float running_max = -FLT_MAX;
   float running_sum = 0.0F;
-
-  // scratch memory for paralell reductions
-  __shared__ float reduction_cache[QWEN35_HEAD_DIM];
 
   float output_accumulator = 0.0F;
 
@@ -45,18 +54,35 @@ __global__ void qwen35_attention_v2_kernel(Qwen35AttentionParams params) {
     const int kv_offset =
         ((batch * QWEN35_KV_HEADS + kv_head) * params.key_tokens + key_token) * QWEN35_HEAD_DIM;
 
-    float score = 0.0F;
-    reduction_cache[feature] = __bfloat162float(params.query[query_offset + feature]) * __bfloat162float(params.key[kv_offset + feature]);
-    __syncthreads();
-    for (int k = QWEN35_HEAD_DIM >> 1; k; k >>= 1) {
-      if (feature < k){
-        reduction_cache[feature] += reduction_cache[feature + k]; 
-      }
-      __syncthreads();
+    float partial = __bfloat162float(params.query[query_offset + feature]) *
+                    __bfloat162float(params.key[kv_offset + feature]);
+
+    for (int offset = 16; offset > 0; offset >>= 1) {
+      partial += __shfl_down_sync(0xffffffff, partial, offset);
     }
-    score = reduction_cache[0];
+
+    __shared__ float warp_sums[QWEN35_HEAD_DIM / NUM_THREADS_WARP];
+    __shared__ float shared_score;
+
+    if (lane() == 0) {
+      warp_sums[warp()] = partial;
+    }
     __syncthreads();
-    score *= QWEN35_ATTENTION_SCALE;
+
+    if (warp() == 0) {
+      float sum = lane() < (QWEN35_HEAD_DIM / NUM_THREADS_WARP) ? warp_sums[lane()] : 0.0f;
+
+      for (int offset = 16; offset > 0; offset >>= 1) {
+        sum += __shfl_down_sync(0xffffffff, sum, offset);
+      }
+
+      if (lane() == 0) {
+        shared_score = sum * QWEN35_ATTENTION_SCALE;
+      }
+    }
+    __syncthreads();
+
+    float score = shared_score;
 
     // Online softmax merge. The previous numerator and denominator are in the
     // exp(score - running_max) coordinate system, so both must be rescaled if
@@ -67,12 +93,13 @@ __global__ void qwen35_attention_v2_kernel(Qwen35AttentionParams params) {
     running_sum = running_sum * previous_scale + current_weight;
 
     output_accumulator = output_accumulator * previous_scale +
-                                  current_weight * __bfloat162float(params.value[kv_offset + feature]);
+                         current_weight * __bfloat162float(params.value[kv_offset + feature]);
     running_max = next_max;
   }
 
   const int output_offset =
-      ((batch * params.query_tokens + query_token) * QWEN35_QUERY_HEADS + query_head) * QWEN35_HEAD_DIM;
+      ((batch * params.query_tokens + query_token) * QWEN35_QUERY_HEADS + query_head) *
+      QWEN35_HEAD_DIM;
   params.output[output_offset + feature] = __float2bfloat16(output_accumulator / running_sum);
 }
 
