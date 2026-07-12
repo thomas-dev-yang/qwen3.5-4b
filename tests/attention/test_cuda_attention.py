@@ -27,6 +27,7 @@ def test_cuda_attention_matches_torch() -> None:
     )
 
     reference = TorchAttention(spec).forward(query, key, value, mask)
-    candidate = CudaAttention(spec).forward(query, key, value, mask)
+    version = os.getenv("QWEN35_ATTENTION_VERSION", "v1")
+    candidate = CudaAttention(spec, version=version).forward(query, key, value, mask)
 
     torch.testing.assert_close(candidate, reference, atol=0.02, rtol=0.02)

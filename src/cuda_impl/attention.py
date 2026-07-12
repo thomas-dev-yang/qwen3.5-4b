@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -14,15 +15,23 @@ def _load_extension():
     source_dir = Path(__file__).parent / "csrc"
     return load(
         name="qwen35_attention_cuda",
-        sources=[str(source_dir / "bindings.cpp"), str(source_dir / "attention.cu")],
+        sources=[
+            str(source_dir / "bindings.cpp"),
+            str(source_dir / "attention.cu"),
+            str(source_dir / "attention_v2.cu"),
+        ],
         extra_cuda_cflags=["-O3", "--use_fast_math"],
         verbose=True,
     )
 
 
 class CudaAttention:
-    def __init__(self, spec: AttentionSpec):
+    def __init__(self, spec: AttentionSpec, version: str | None = None):
         self.spec = spec
+        selected = version or os.getenv("QWEN35_ATTENTION_VERSION", "v1")
+        if selected not in {"v1", "v2"}:
+            raise ValueError("attention version must be v1 or v2")
+        self.version = int(selected.removeprefix("v"))
 
     def forward(
         self,
@@ -42,4 +51,5 @@ class CudaAttention:
             mask,
             self.spec.scale,
             self.spec.num_kv_groups,
+            self.version,
         )

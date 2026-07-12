@@ -11,6 +11,7 @@ from cuda_impl.attention import CudaAttention
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--version", choices=("v1", "v2"), default="v1")
     parser.add_argument("--mode", choices=("decode", "prefill"), default="decode")
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--tokens", type=int)
@@ -23,7 +24,7 @@ def main() -> None:
     tokens = args.tokens or (1024 if args.mode == "decode" else 64)
     query_tokens = 1 if args.mode == "decode" else tokens
     spec = full_attention_spec(load_settings().model)
-    attention = CudaAttention(spec)
+    attention = CudaAttention(spec, version=args.version)
 
     torch.manual_seed(11)
     query = torch.randn(
@@ -48,7 +49,7 @@ def main() -> None:
         attention.forward(query, key, value, None)
     torch.cuda.synchronize()
 
-    torch.cuda.nvtx.range_push(f"qwen35_attention_{args.mode}")
+    torch.cuda.nvtx.range_push(f"qwen35_attention_{args.version}_{args.mode}")
     attention.forward(query, key, value, None)
     torch.cuda.nvtx.range_pop()
     torch.cuda.synchronize()

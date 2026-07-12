@@ -41,7 +41,7 @@ py-modules = ["qwen35_cli", "workflows"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-cuda_impl = ["csrc/*.cpp", "csrc/*.cu"]
+cuda_impl = ["csrc/*.cpp", "csrc/*.cu", "csrc/*.cuh"]
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"

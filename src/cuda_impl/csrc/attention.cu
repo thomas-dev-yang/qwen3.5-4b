@@ -1,3 +1,5 @@
+#include "attention_v2.cuh"
+
 #include <c10/core/ScalarType.h>
 #include <c10/cuda/CUDAStream.h>
 #include <c10/util/Exception.h>
@@ -15,11 +17,11 @@
 // Typed CUDA entrypoint. The torch::Tensor function below is responsible for
 // validating tensors, allocating output, extracting these pointers and sizes,
 // and launching this kernel on PyTorch's current CUDA stream.
-__global__ void qwen35_attention_kernel(const __nv_bfloat16 *__restrict__ query,
-                                        const __nv_bfloat16 *__restrict__ key,
-                                        const __nv_bfloat16 *__restrict__ value,
-                                        __nv_bfloat16 *__restrict__ output, int batch_size,
-                                        int query_tokens, int key_tokens) {
+__global__ void qwen35_attention_v1_kernel(const __nv_bfloat16 *__restrict__ query,
+                                           const __nv_bfloat16 *__restrict__ key,
+                                           const __nv_bfloat16 *__restrict__ value,
+                                           __nv_bfloat16 *__restrict__ output, int batch_size,
+                                           int query_tokens, int key_tokens) {
   // One thread owns one complete output vector:
   //   output[batch][query_token][query_head][0..255]
   // The intentionally simple launch is:
@@ -111,7 +113,8 @@ __global__ void qwen35_attention_kernel(const __nv_bfloat16 *__restrict__ query,
 // dimensions/strides, scale, and cudaStream_t. This kernel does not own the KV
 // cache; key and value already represent the complete visible history.
 torch::Tensor attention_cuda(torch::Tensor query, torch::Tensor key, torch::Tensor value,
-                             torch::Tensor attention_mask, double scale, int64_t num_kv_groups) {
+                             torch::Tensor attention_mask, double scale, int64_t num_kv_groups,
+                             int64_t version) {
   TORCH_CHECK(query.is_cuda(), "query must be a CUDA tensor");
   TORCH_CHECK(key.is_cuda(), "key must be a CUDA tensor");
   TORCH_CHECK(value.is_cuda(), "value must be a CUDA tensor");
@@ -151,11 +154,19 @@ torch::Tensor attention_cuda(torch::Tensor query, torch::Tensor key, torch::Tens
                              query.options());
   auto *output_ptr = reinterpret_cast<__nv_bfloat16 *>(output.data_ptr<at::BFloat16>());
 
-  const dim3 grid(query_tokens, QWEN35_QUERY_HEADS, batch_size);
-  const dim3 block(1, 1, 1);
   const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(query.get_device()).stream();
-  qwen35_attention_kernel<<<grid, block, 0, stream>>>(query_ptr, key_ptr, value_ptr, output_ptr,
-                                                      batch_size, query_tokens, key_tokens);
+  if (version == 1) {
+    const dim3 grid(query_tokens, QWEN35_QUERY_HEADS, batch_size);
+    const dim3 block(1, 1, 1);
+    qwen35_attention_v1_kernel<<<grid, block, 0, stream>>>(
+        query_ptr, key_ptr, value_ptr, output_ptr, batch_size, query_tokens, key_tokens);
+  } else if (version == 2) {
+    const Qwen35AttentionParams params{query_ptr,  key_ptr,      value_ptr, output_ptr,
+                                       batch_size, query_tokens, key_tokens};
+    launch_qwen35_attention_v2(params, stream);
+  } else {
+    TORCH_CHECK(false, "attention version must be 1 or 2");
+  }
   TORCH_CHECK(cudaGetLastError() == cudaSuccess, "Qwen3.5 attention kernel launch failed");
 
   return output;
