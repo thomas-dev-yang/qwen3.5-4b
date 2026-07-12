@@ -21,6 +21,20 @@ __device__ __forceinline__ int warp() {
     return threadIdx.x >> 5;
 }
 
+__device__ __forceinline__ float warp_reduce_sum(float value) {
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        value += __shfl_down_sync(0xffffffff, value, offset);
+    }
+    return value;
+}
+
+__device__ __forceinline__ float warp_reduce_max(float value) {
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        value = fmaxf(value, __shfl_down_sync(0xffffffff, value, offset));
+    }
+    return value;
+}
+
 __device__ __forceinline__ int partial_offset(const Qwen35AttentionV3Params &params, int batch,
                                               int query_token, int query_head, int key_tile) {
     return (
@@ -64,29 +78,83 @@ __global__ void qwen35_attention_v4_partial_kernel(Qwen35AttentionV3Params param
     __shared__ float group_max;
     __shared__ float group_sum;
 
+    // Copied between all threads in a warp
     float running_max = -FLT_MAX;
     float running_sum = 0.0F;
+    // The actual feature dimension (thread local variable that is independent) that will be used
+    // elsewhere.
     float output_accumulator = 0.0F;
 
     for (int group_start = key_start; group_start < key_end;
          group_start += QWEN35_V4_KEYS_PER_GROUP) {
         const int warp_key = group_start + warp();
         const bool warp_key_is_visible = warp_key < key_end;
+        const int kv_offset =
+            ((batch * QWEN35_KV_HEADS + kv_head) * params.attention.key_tokens + warp_key) *
+            QWEN35_HEAD_DIM;
 
         // TODO phase 1: each warp computes one complete Q dot K score. Each
         // lane should process features lane, lane + 32, ..., lane + 224.
         // Invalid tail-group warps must publish a score of -infinity.
-        (void)warp_key;
-        (void)warp_key_is_visible;
-        (void)kv_head;
-        (void)query_offset;
+        float partial = 0.0F;
+        if (warp_key_is_visible) {
+            for (int d = lane(); d < QWEN35_HEAD_DIM; d += 32) {
+                partial += __bfloat162float(params.attention.query[query_offset + d]) *
+                           __bfloat162float(params.attention.key[kv_offset + d]);
+            }
+            partial = warp_reduce_sum(partial);
+        }
 
-        // TODO phase 2: use scores[0..7] to compute group_max, group_sum, and
-        // weights[0..7]. All threads need the resulting scalar/vector state.
+        if (lane() == 0) {
+            scores[warp()] = warp_key_is_visible ? partial * QWEN35_ATTENTION_SCALE : -FLT_MAX;
+        }
+        __syncthreads();
 
-        // TODO phase 3: thread `feature` computes its weighted sum across the
-        // eight V rows, then merges that group state into running_max,
-        // running_sum, and output_accumulator.
+        // Warp 0 constructs a standalone softmax state for this group. The
+        // other warps wait while its first eight lanes own the eight scores.
+        if (warp() == 0) {
+            const float score = lane() < QWEN35_V4_KEYS_PER_GROUP ? scores[lane()] : -FLT_MAX;
+            const float max_value = warp_reduce_max(score);
+            if (lane() == 0) {
+                group_max = max_value;
+            }
+        }
+        __syncthreads();
+
+        if (warp() == 0) {
+            const float weight =
+                lane() < QWEN35_V4_KEYS_PER_GROUP ? expf(scores[lane()] - group_max) : 0.0F;
+            const float sum = warp_reduce_sum(weight);
+            if (lane() < QWEN35_V4_KEYS_PER_GROUP) {
+                weights[lane()] = weight;
+            }
+            if (lane() == 0) {
+                group_sum = sum;
+            }
+        }
+        __syncthreads();
+
+        // do all features V, now that we have proper weights
+        float group_numerator = 0.0F;
+        for (int group_key = 0; group_key < QWEN35_V4_KEYS_PER_GROUP; ++group_key) {
+            const int key_token = group_start + group_key;
+            if (key_token < key_end) {
+                const int value_offset =
+                    ((batch * QWEN35_KV_HEADS + kv_head) * params.attention.key_tokens +
+                     key_token) *
+                    QWEN35_HEAD_DIM;
+                group_numerator += weights[group_key] *
+                                   __bfloat162float(params.attention.value[value_offset + feature]);
+            }
+        }
+
+        const float next_max = fmaxf(running_max, group_max);
+        const float running_scale = expf(running_max - next_max);
+        const float group_scale = expf(group_max - next_max);
+
+        running_sum = running_sum * running_scale + group_sum * group_scale;
+        output_accumulator = output_accumulator * running_scale + group_numerator * group_scale;
+        running_max = next_max;
     }
 
     const int workspace_offset = partial_offset(params, batch, query_token, query_head, key_tile);
