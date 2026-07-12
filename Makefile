@@ -1,7 +1,7 @@
 .PHONY: setup doctor download test lint check benchmark pack
 
 setup:
-	bash scripts/setup_runpod.sh
+	bash scripts/setup_cloud.sh
 
 doctor:
 	uv run --locked qwen35 doctor
@@ -22,4 +22,4 @@ benchmark:
 	uv run --locked qwen35 benchmark --prompt-length 128 --decode-steps 32
 
 pack:
-	bash scripts/pack_for_runpod.sh
+	bash scripts/pack_for_cloud.sh

@@ -13,3 +13,4 @@ artifacts/
 compile_commands.json
 .env
 .huggingface/
+tools/cloud/config.json

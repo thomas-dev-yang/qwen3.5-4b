@@ -71,7 +71,7 @@ Implement [attention.cu](src/cuda_impl/csrc/attention.cu), then run:
 ./build-script.sh
 ```
 
-This builds in the pinned RunPod CUDA image for H100 `sm_90`, writes the extension under `build/torch_extensions/`, and generates `compile_commands.json` with Bear.
+This builds in a pinned CUDA image for H100 `sm_90`, writes the extension under `build/torch_extensions/`, and generates `compile_commands.json` with Bear. Override the default image with `QWEN35_BUILD_BASE_IMAGE` when needed.
 
 The project-root `.clangd` reads that compilation database automatically. `.clang-format` defines the C++/CUDA formatting style.
 
@@ -84,13 +84,13 @@ QWEN35_TEST_CUDA_KERNEL=1 \
 
 The test feeds Qwen-shaped BF16 Q/K/V tensors to the PyTorch and CUDA implementations and compares their outputs.
 
-## RunPod transfer
+## Cloud transfer
 
-From the parent repository on your local machine:
+From the repository on your local machine:
 
 ```bash
-./bundle.sh
-./connect.sh
+./tools/cloud/bundle.sh
+./tools/cloud/connect.sh
 ```
 
-The connection parameters live in the parent `config.json`.
+The scripts use a stable OpenSSH alias from `~/.ssh/config`. Copy `tools/cloud/config.example.json` to the ignored `tools/cloud/config.json` and set only the alias and remote project root. Host, port, username, proxy commands, and SSH identity belong in your local OpenSSH configuration, not this repository.

@@ -4,3 +4,7 @@ CompileFlags:
 Diagnostics:
   UnusedIncludes: Strict
   MissingIncludes: Strict
+  Suppress:
+    - undeclared_var_use_suggest
+    - typename_invalid_functionspec
+    - expected_expression

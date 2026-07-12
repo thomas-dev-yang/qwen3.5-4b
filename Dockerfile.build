@@ -1,6 +1,7 @@
 FROM ghcr.io/astral-sh/uv:0.9.26 AS uv
 
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+ARG BUILD_BASE_IMAGE=runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+FROM ${BUILD_BASE_IMAGE}
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 

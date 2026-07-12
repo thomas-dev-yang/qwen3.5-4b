@@ -1,0 +1,4 @@
+{
+  "target": "qwen-gpu",
+  "remote_root": "/home/your-user"
+}
