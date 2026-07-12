@@ -10,7 +10,7 @@ from torch_impl.attention import TorchAttention
 
 pytestmark = pytest.mark.cuda_kernel
 SELECTED_VERSION = os.getenv("QWEN35_ATTENTION_VERSION")
-VERSIONS = (SELECTED_VERSION,) if SELECTED_VERSION else ("v1", "v2", "v3")
+VERSIONS = (SELECTED_VERSION,) if SELECTED_VERSION else ("v1", "v2", "v3", "v4")
 
 
 @pytest.mark.skipif(

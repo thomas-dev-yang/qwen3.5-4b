@@ -20,6 +20,7 @@ def _load_extension():
             str(source_dir / "attention.cu"),
             str(source_dir / "attention_v2.cu"),
             str(source_dir / "attention_v3.cu"),
+            str(source_dir / "attention_v4.cu"),
         ],
         extra_cuda_cflags=["-O3", "--use_fast_math"],
         verbose=True,
@@ -30,8 +31,8 @@ class CudaAttention:
     def __init__(self, spec: AttentionSpec, version: str | None = None):
         self.spec = spec
         selected = version or os.getenv("QWEN35_ATTENTION_VERSION", "v1")
-        if selected not in {"v1", "v2", "v3"}:
-            raise ValueError("attention version must be v1, v2, or v3")
+        if selected not in {"v1", "v2", "v3", "v4"}:
+            raise ValueError("attention version must be v1, v2, v3, or v4")
         self.version = int(selected.removeprefix("v"))
 
     def forward(

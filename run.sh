@@ -24,9 +24,9 @@ run_kernel_correctness() {
 if (( $# == 0 )); then
   bash scripts/check_correctness.sh
   run_kernel_correctness
-elif [[ "$1" == "v1" || "$1" == "v2" || "$1" == "v3" ]]; then
+elif [[ "$1" == "v1" || "$1" == "v2" || "$1" == "v3" || "$1" == "v4" ]]; then
   run_kernel_correctness "$1"
 else
-  echo "usage: ./run.sh [v1|v2|v3]" >&2
+  echo "usage: ./run.sh [v1|v2|v3|v4]" >&2
   exit 1
 fi

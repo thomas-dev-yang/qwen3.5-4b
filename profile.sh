@@ -31,16 +31,16 @@ profile_one() {
   local launch_skip="$WARMUP"
   local launch_count=1
 
-  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" ]]; then
-    echo "attention version must be v1, v2, or v3" >&2
+  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" && "$version" != "v4" ]]; then
+    echo "attention version must be v1, v2, v3, or v4" >&2
     return 1
   fi
   if [[ "$mode" != "decode" && "$mode" != "prefill" ]]; then
     echo "mode must be decode or prefill" >&2
     return 1
   fi
-  if [[ "$version" == "v3" ]]; then
-    kernel_pattern='regex:.*qwen35_attention_v3_.*kernel.*'
+  if [[ "$version" == "v3" || "$version" == "v4" ]]; then
+    kernel_pattern="regex:.*qwen35_attention_${version}_.*kernel.*"
     launch_skip=$((WARMUP * 2))
     launch_count=2
   fi
@@ -62,7 +62,7 @@ profile_one() {
 }
 
 if (( $# == 0 )); then
-  for version in v1 v2 v3; do
+  for version in v1 v2 v3 v4; do
     profile_one "$version" decode 1024
     profile_one "$version" prefill 64
   done
