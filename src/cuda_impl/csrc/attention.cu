@@ -1,4 +1,5 @@
 #include "attention_v2.cuh"
+#include "attention_v3.cuh"
 
 #include <c10/core/ScalarType.h>
 #include <c10/cuda/CUDAStream.h>
@@ -164,8 +165,19 @@ torch::Tensor attention_cuda(torch::Tensor query, torch::Tensor key, torch::Tens
     const Qwen35AttentionParams params{query_ptr,  key_ptr,      value_ptr, output_ptr,
                                        batch_size, query_tokens, key_tokens};
     launch_qwen35_attention_v2(params, stream);
+  } else if (version == 3) {
+    constexpr int key_tile = 128;
+    constexpr int partial_values = QWEN35_HEAD_DIM + 2;
+    const int key_tiles = (key_tokens + key_tile - 1) / key_tile;
+    auto partials =
+        torch::empty({batch_size, query_tokens, QWEN35_QUERY_HEADS, key_tiles, partial_values},
+                     query.options().dtype(torch::kFloat32));
+    const Qwen35AttentionParams attention_params{query_ptr,  key_ptr,      value_ptr, output_ptr,
+                                                 batch_size, query_tokens, key_tokens};
+    const Qwen35AttentionV3Params params{attention_params, partials.data_ptr<float>(), key_tiles};
+    launch_qwen35_attention_v3(params, stream);
   } else {
-    TORCH_CHECK(false, "attention version must be 1 or 2");
+    TORCH_CHECK(false, "attention version must be 1, 2, or 3");
   }
   TORCH_CHECK(cudaGetLastError() == cudaSuccess, "Qwen3.5 attention kernel launch failed");
 

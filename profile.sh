@@ -3,9 +3,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-VERSION="${1:-v1}"
-MODE="${2:-decode}"
-TOKENS="${3:-}"
 WARMUP=5
 NCU="${NCU:-$(command -v ncu || true)}"
 NCU_SET="${NCU_SET:-full}"
@@ -23,25 +20,61 @@ export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-9.0}"
 export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-$PWD/build/torch_extensions}"
 mkdir -p "$TORCH_EXTENSIONS_DIR" artifacts/profiles
 
-# Compile outside NCU so compilation and extension loading do not pollute the capture.
+# Compile once outside NCU so extension loading does not pollute any capture.
 .venv/bin/python -c 'from cuda_impl.attention import _load_extension; _load_extension()'
 
-if [[ "$VERSION" != "v1" && "$VERSION" != "v2" ]]; then
-  echo "usage: ./profile.sh {v1|v2} {decode|prefill} [tokens]" >&2
-  exit 1
-fi
+profile_one() {
+  local version="$1"
+  local mode="$2"
+  local tokens="$3"
+  local kernel_pattern="regex:.*qwen35_attention_${version}_kernel.*"
+  local launch_skip="$WARMUP"
+  local launch_count=1
 
-PROFILE_ARGS=(--version "$VERSION" --mode "$MODE" --warmup "$WARMUP")
-if [[ -n "$TOKENS" ]]; then
-  PROFILE_ARGS+=(--tokens "$TOKENS")
-fi
+  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" ]]; then
+    echo "attention version must be v1, v2, or v3" >&2
+    return 1
+  fi
+  if [[ "$mode" != "decode" && "$mode" != "prefill" ]]; then
+    echo "mode must be decode or prefill" >&2
+    return 1
+  fi
+  if [[ "$version" == "v3" ]]; then
+    kernel_pattern='regex:.*qwen35_attention_v3_.*kernel.*'
+    launch_skip=$((WARMUP * 2))
+    launch_count=2
+  fi
 
-exec "$NCU" \
-  --set "$NCU_SET" \
-  --force-overwrite \
-  --kernel-name-base demangled \
-  --kernel-name "regex:.*qwen35_attention_${VERSION}_kernel.*" \
-  --launch-skip "$WARMUP" \
-  --launch-count 1 \
-  --export "artifacts/profiles/attention-$VERSION-$MODE${TOKENS:+-k$TOKENS}" \
-  .venv/bin/python scripts/profile_attention.py "${PROFILE_ARGS[@]}"
+  echo "Profiling $version $mode with $tokens tokens"
+  "$NCU" \
+    --set "$NCU_SET" \
+    --force-overwrite \
+    --kernel-name-base demangled \
+    --kernel-name "$kernel_pattern" \
+    --launch-skip "$launch_skip" \
+    --launch-count "$launch_count" \
+    --export "artifacts/profiles/attention-$version-$mode-k$tokens" \
+    .venv/bin/python scripts/profile_attention.py \
+      --version "$version" \
+      --mode "$mode" \
+      --tokens "$tokens" \
+      --warmup "$WARMUP"
+}
+
+if (( $# == 0 )); then
+  for version in v1 v2 v3; do
+    profile_one "$version" decode 1024
+    profile_one "$version" prefill 64
+  done
+else
+  VERSION="$1"
+  MODE="${2:-decode}"
+  if [[ -n "${3:-}" ]]; then
+    TOKENS="$3"
+  elif [[ "$MODE" == "decode" ]]; then
+    TOKENS=1024
+  else
+    TOKENS=64
+  fi
+  profile_one "$VERSION" "$MODE" "$TOKENS"
+fi
