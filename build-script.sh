@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 IMAGE="${QWEN35_BUILD_IMAGE:-qwen35-cuda-build}"
-BASE_IMAGE="${QWEN35_BUILD_BASE_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
+BASE_IMAGE="${QWEN35_BUILD_BASE_IMAGE:-pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel}"
 BUILD_ROOT="$ROOT/build"
 EXTENSION_ROOT="$BUILD_ROOT/torch_extensions"
 UV_CACHE="$BUILD_ROOT/uv-cache"
@@ -11,11 +11,15 @@ TOOLCHAIN_ROOT="$BUILD_ROOT/toolchain"
 CUDA_ROOT="$TOOLCHAIN_ROOT/cuda"
 PYTHON_INCLUDE="$TOOLCHAIN_ROOT/python/include/python3.11"
 IMAGE_MARKER="$TOOLCHAIN_ROOT/image-id"
-TOOLCHAIN_LAYOUT_VERSION=4
+TOOLCHAIN_LAYOUT_VERSION=5
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required" >&2
   exit 1
+fi
+
+if [[ ! -f "$ROOT/third_party/ThunderKittens/include/kittens.cuh" ]]; then
+  git -C "$ROOT" submodule update --init --recursive
 fi
 
 mkdir -p "$EXTENSION_ROOT" "$UV_CACHE"
@@ -35,10 +39,15 @@ if [[ ! -f "$IMAGE_MARKER" ]] || [[ "$(<"$IMAGE_MARKER")" != "$TOOLCHAIN_ID" ]];
   docker run --rm --entrypoint /bin/tar "$IMAGE" \
     --dereference -C /usr/local/cuda -cf - bin/nvcc include nvvm/libdevice \
     | tar -C "$CUDA_ROOT" -xf -
-  printf 'CUDA Version 12.4.1\n' >"$CUDA_ROOT/version.txt"
+  docker run --rm --entrypoint /usr/local/cuda/bin/nvcc "$IMAGE" --version \
+    >"$CUDA_ROOT/version.txt"
 
+  PYTHON_INCLUDE_IN_IMAGE="$(
+    docker run --rm --entrypoint python "$IMAGE" \
+      -c 'import sysconfig; print(sysconfig.get_path("include"))'
+  )"
   docker run --rm --entrypoint /bin/tar "$IMAGE" \
-    -C /usr/include -cf - python3.11 x86_64-linux-gnu/python3.11 \
+    -C "$(dirname "$PYTHON_INCLUDE_IN_IMAGE")" -cf - "$(basename "$PYTHON_INCLUDE_IN_IMAGE")" \
     | tar -C "$TOOLCHAIN_ROOT/python/include" -xf -
 
   printf '%s\n' "$TOOLCHAIN_ID" >"$IMAGE_MARKER"
@@ -50,7 +59,7 @@ docker run --rm \
   --workdir "$ROOT" \
   --env "HOST_UID=$(id -u)" \
   --env "HOST_GID=$(id -g)" \
-  --env "TORCH_CUDA_ARCH_LIST=9.0" \
+  --env "TORCH_CUDA_ARCH_LIST=9.0a" \
   --env "TORCH_EXTENSIONS_DIR=$EXTENSION_ROOT" \
   --env "UV_CACHE_DIR=$UV_CACHE" \
   --env "UV_PROJECT_ENVIRONMENT=$BUILD_ROOT/venv" \

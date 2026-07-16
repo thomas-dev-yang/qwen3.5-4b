@@ -11,10 +11,21 @@ MANIFEST="$(mktemp)"
 trap 'rm -f "$MANIFEST"' EXIT
 
 while IFS= read -r -d '' path; do
+  if [[ "$(git ls-files --stage -- "$path" | awk '{print $1}' | head -1)" == "160000" ]]; then
+    continue
+  fi
   if [[ -e "$path" || -L "$path" ]]; then
     printf '%s\0' "$path"
   fi
 done < <(git ls-files --cached --others --exclude-standard -z) >"$MANIFEST"
+
+if [[ -f .gitmodules ]]; then
+  while read -r _ submodule; do
+    while IFS= read -r -d '' path; do
+      printf '%s/%s\0' "$submodule" "$path"
+    done < <(git -C "$submodule" ls-files -z)
+  done < <(git config --file .gitmodules --get-regexp '^submodule\..*\.path$') >>"$MANIFEST"
+fi
 
 if [[ "$INCLUDE_MODEL" == "1" && -d models ]]; then
   find models -type f -print0 >>"$MANIFEST"

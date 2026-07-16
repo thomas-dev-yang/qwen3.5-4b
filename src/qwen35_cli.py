@@ -7,8 +7,9 @@ from pathlib import Path
 
 import torch
 
+from common.benchmark import benchmark_comparison
 from common.config import load_settings
-from hf_impl.benchmark import benchmark_hf
+from cuda_impl.correctness import validate_cuda_model
 from hf_impl.model import model_source, validate_checkpoint_config
 from workflows import (
     compare_artifacts,
@@ -53,10 +54,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare.add_argument("--report", type=_path, default=_path("artifacts/correctness/report.json"))
 
-    benchmark = subparsers.add_parser("benchmark", help="Benchmark HF text-only prefill and decode")
-    benchmark.add_argument("--prompt-length", type=int, default=128)
+    benchmark = subparsers.add_parser(
+        "benchmark", help="Compare Transformers and custom-attention Qwen decode"
+    )
+    benchmark.add_argument("--prompt-length", type=int, default=1024)
     benchmark.add_argument("--decode-steps", type=int, default=None)
+    benchmark.add_argument(
+        "--attention-version", choices=("v1", "v2", "v3", "v4", "v5"), default="v5"
+    )
     benchmark.add_argument("--output", type=_path, default=None)
+
+    validate_cuda = subparsers.add_parser(
+        "validate-cuda", help="Trace the custom attention through every Qwen layer"
+    )
+    validate_cuda.add_argument(
+        "--attention-version", choices=("v1", "v2", "v3", "v4", "v5"), default="v5"
+    )
+    validate_cuda.add_argument("--prompt-length", type=int, default=128)
+    validate_cuda.add_argument("--decode-steps", type=int, default=4)
+    validate_cuda.add_argument(
+        "--output", type=_path, default=_path("artifacts/correctness/cuda-model.json")
+    )
     return parser
 
 
@@ -120,13 +138,36 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.passed else 1
     if args.command == "benchmark":
         decode_steps = args.decode_steps or settings.benchmark.decode_steps
-        report = benchmark_hf(settings, args.prompt_length, decode_steps)
+        report = benchmark_comparison(
+            settings, args.prompt_length, decode_steps, args.attention_version
+        )
         rendered = json.dumps(report, indent=2)
         print(rendered)
         if args.output is not None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered + "\n", encoding="utf-8")
-        return 0
+        return 0 if report["correctness"]["passed"] else 1
+    if args.command == "validate-cuda":
+        report = validate_cuda_model(
+            settings,
+            version=args.attention_version,
+            prompt_length=args.prompt_length,
+            decode_steps=args.decode_steps,
+        )
+        rendered = json.dumps(report, indent=2)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
+        print(
+            json.dumps(
+                {
+                    "passed": report["passed"],
+                    **report["summary"],
+                    "report": str(args.output),
+                },
+                indent=2,
+            )
+        )
+        return 0 if report["passed"] else 1
     raise AssertionError(f"Unhandled command: {args.command}")
 
 

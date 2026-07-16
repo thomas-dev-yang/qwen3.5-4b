@@ -13,6 +13,14 @@ from common.attention import AttentionSpec, validate_attention_inputs
 @lru_cache(maxsize=1)
 def _load_extension():
     source_dir = Path(__file__).parent / "csrc"
+    thunderkittens_include = (
+        Path(__file__).parents[2] / "third_party" / "ThunderKittens" / "include"
+    )
+    if not (thunderkittens_include / "kittens.cuh").is_file():
+        raise RuntimeError(
+            "ThunderKittens is missing; run: git submodule update --init --recursive"
+        )
+    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "9.0a")
     return load(
         name="qwen35_attention_cuda",
         sources=[
@@ -21,8 +29,17 @@ def _load_extension():
             str(source_dir / "attention_v2.cu"),
             str(source_dir / "attention_v3.cu"),
             str(source_dir / "attention_v4.cu"),
+            str(source_dir / "attention_v5.cu"),
         ],
-        extra_cuda_cflags=["-O3", "--use_fast_math"],
+        extra_include_paths=[str(thunderkittens_include)],
+        extra_cuda_cflags=[
+            "-O3",
+            "--use_fast_math",
+            "--expt-extended-lambda",
+            "--expt-relaxed-constexpr",
+            "-std=c++20",
+            "-DKITTENS_SM90",
+        ],
         verbose=True,
     )
 
@@ -31,8 +48,8 @@ class CudaAttention:
     def __init__(self, spec: AttentionSpec, version: str | None = None):
         self.spec = spec
         selected = version or os.getenv("QWEN35_ATTENTION_VERSION", "v1")
-        if selected not in {"v1", "v2", "v3", "v4"}:
-            raise ValueError("attention version must be v1, v2, v3, or v4")
+        if selected not in {"v1", "v2", "v3", "v4", "v5"}:
+            raise ValueError("attention version must be v1, v2, v3, v4, or v5")
         self.version = int(selected.removeprefix("v"))
 
     def forward(

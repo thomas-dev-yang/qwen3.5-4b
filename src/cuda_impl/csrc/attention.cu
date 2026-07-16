@@ -1,6 +1,7 @@
 #include "attention_v2.cuh"
 #include "attention_v3.cuh"
 #include "attention_v4.cuh"
+#include "attention_v5.cuh"
 
 #include <c10/core/ScalarType.h>
 #include <c10/cuda/CUDAStream.h>
@@ -192,8 +193,18 @@ torch::Tensor attention_cuda(torch::Tensor query, torch::Tensor key, torch::Tens
         const Qwen35AttentionV3Params params{attention_params, partials.data_ptr<float>(),
                                              key_tiles};
         launch_qwen35_attention_v4(params, stream);
+    } else if (version == 5) {
+        auto head_major_output = torch::empty(
+            {batch_size, QWEN35_QUERY_HEADS, query_tokens, QWEN35_HEAD_DIM}, query.options());
+        auto *head_major_output_ptr =
+            reinterpret_cast<__nv_bfloat16 *>(head_major_output.data_ptr<at::BFloat16>());
+        const Qwen35AttentionParams params{
+            query_ptr,  key_ptr,      value_ptr, head_major_output_ptr,
+            batch_size, query_tokens, key_tokens};
+        launch_qwen35_attention_v5(params, stream);
+        output = head_major_output.permute({0, 2, 1, 3}).contiguous();
     } else {
-        TORCH_CHECK(false, "attention version must be 1, 2, 3, or 4");
+        TORCH_CHECK(false, "attention version must be 1, 2, 3, 4, or 5");
     }
     TORCH_CHECK(cudaGetLastError() == cudaSuccess, "Qwen3.5 attention kernel launch failed");
 

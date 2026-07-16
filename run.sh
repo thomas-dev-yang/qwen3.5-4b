@@ -21,12 +21,21 @@ run_kernel_correctness() {
   fi
 }
 
+run_model_correctness() {
+  local version="$1"
+  .venv/bin/qwen35 validate-cuda \
+    --attention-version "$version" \
+    --output "artifacts/correctness/cuda-model-$version.json"
+}
+
 if (( $# == 0 )); then
   bash scripts/check_correctness.sh
   run_kernel_correctness
-elif [[ "$1" == "v1" || "$1" == "v2" || "$1" == "v3" || "$1" == "v4" ]]; then
+  run_model_correctness v5
+elif [[ "$1" == "v1" || "$1" == "v2" || "$1" == "v3" || "$1" == "v4" || "$1" == "v5" ]]; then
   run_kernel_correctness "$1"
+  run_model_correctness "$1"
 else
-  echo "usage: ./run.sh [v1|v2|v3|v4]" >&2
+  echo "usage: ./run.sh [v1|v2|v3|v4|v5]" >&2
   exit 1
 fi

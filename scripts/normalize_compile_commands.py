@@ -29,7 +29,7 @@ def normalize_arguments(
         if argument == "/usr/local/cuda/include":
             normalized.append(str(cuda_root / "include"))
             continue
-        if argument == "/usr/include/python3.11":
+        if argument in {"/usr/include/python3.11", "/opt/conda/include/python3.11"}:
             normalized.append(str(python_include))
             continue
         normalized.append(argument)
@@ -39,7 +39,7 @@ def normalize_arguments(
             "-x",
             "cuda",
             f"--cuda-path={cuda_root}",
-            "--cuda-gpu-arch=sm_90",
+            "--cuda-gpu-arch=sm_90a",
             "-nocudalib",
             "-isystem",
             str(python_include.parent),

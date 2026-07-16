@@ -1,4 +1,4 @@
-ARG BUILD_BASE_IMAGE=runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+ARG BUILD_BASE_IMAGE=pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
 
 FROM ghcr.io/astral-sh/uv:0.9.26 AS uv
 

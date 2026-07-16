@@ -16,7 +16,7 @@ if [[ ! -x .venv/bin/python ]]; then
   exit 1
 fi
 
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-9.0}"
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-9.0a}"
 export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-$PWD/build/torch_extensions}"
 mkdir -p "$TORCH_EXTENSIONS_DIR" artifacts/profiles
 
@@ -31,8 +31,8 @@ profile_one() {
   local launch_skip="$WARMUP"
   local launch_count=1
 
-  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" && "$version" != "v4" ]]; then
-    echo "attention version must be v1, v2, v3, or v4" >&2
+  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" && "$version" != "v4" && "$version" != "v5" ]]; then
+    echo "attention version must be v1, v2, v3, v4, or v5" >&2
     return 1
   fi
   if [[ "$mode" != "decode" && "$mode" != "prefill" ]]; then
@@ -62,7 +62,7 @@ profile_one() {
 }
 
 if (( $# == 0 )); then
-  for version in v1 v2 v3 v4; do
+  for version in v1 v2 v3 v4 v5; do
     profile_one "$version" decode 1024
     profile_one "$version" prefill 64
   done
