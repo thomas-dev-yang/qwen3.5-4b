@@ -16,6 +16,7 @@ def _load_extension():
     thunderkittens_include = (
         Path(__file__).parents[2] / "third_party" / "ThunderKittens" / "include"
     )
+    thunderkittens_prototype = thunderkittens_include.parent / "prototype"
     if not (thunderkittens_include / "kittens.cuh").is_file():
         raise RuntimeError(
             "ThunderKittens is missing; run: git submodule update --init --recursive"
@@ -30,8 +31,9 @@ def _load_extension():
             str(source_dir / "attention_v3.cu"),
             str(source_dir / "attention_v4.cu"),
             str(source_dir / "attention_v5.cu"),
+            str(source_dir / "attention_v6.cu"),
         ],
-        extra_include_paths=[str(thunderkittens_include)],
+        extra_include_paths=[str(thunderkittens_include), str(thunderkittens_prototype)],
         extra_cuda_cflags=[
             "-O3",
             "--use_fast_math",
@@ -40,6 +42,10 @@ def _load_extension():
             "-std=c++20",
             "-DKITTENS_SM90",
         ],
+        # TMA tensor-map construction uses the CUDA driver API. Link against
+        # CUDA's unversioned stub at build time; GPU hosts resolve libcuda.so.1
+        # from the installed NVIDIA driver when the extension is loaded.
+        extra_ldflags=["-L/usr/local/cuda/lib64/stubs", "-lcuda"],
         verbose=True,
     )
 
@@ -48,8 +54,8 @@ class CudaAttention:
     def __init__(self, spec: AttentionSpec, version: str | None = None):
         self.spec = spec
         selected = version or os.getenv("QWEN35_ATTENTION_VERSION", "v1")
-        if selected not in {"v1", "v2", "v3", "v4", "v5"}:
-            raise ValueError("attention version must be v1, v2, v3, v4, or v5")
+        if selected not in {"v1", "v2", "v3", "v4", "v5", "v6"}:
+            raise ValueError("attention version must be v1, v2, v3, v4, v5, or v6")
         self.version = int(selected.removeprefix("v"))
 
     def forward(

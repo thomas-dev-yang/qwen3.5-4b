@@ -41,18 +41,27 @@ def _capture_model_trace(
     current_stage = [""]
     hooks = []
 
-    def capture_attention(layer_index: int):
+    def capture_mixer(layer_index: int, mixer: str):
         def hook(_module, _inputs, output) -> None:
-            attention_output = output[0] if isinstance(output, tuple) else output
-            records[f"{current_stage[0]}.attention.layer_{layer_index:02d}"] = (
-                attention_output.detach().to("cpu").contiguous()
+            mixer_output = output[0] if isinstance(output, tuple) else output
+            records[f"{current_stage[0]}.{mixer}.layer_{layer_index:02d}"] = (
+                mixer_output.detach().to("cpu").contiguous()
             )
 
         return hook
 
     for layer_index, layer in enumerate(engine.language_model.layers):
-        if getattr(layer, "block_type", None) == "full_attention":
-            hooks.append(layer.self_attn.register_forward_hook(capture_attention(layer_index)))
+        layer_type = getattr(layer, "block_type", None)
+        if layer_type == "full_attention":
+            hooks.append(
+                layer.self_attn.register_forward_hook(capture_mixer(layer_index, "full_attention"))
+            )
+        elif layer_type == "linear_attention":
+            hooks.append(
+                layer.linear_attn.register_forward_hook(
+                    capture_mixer(layer_index, "linear_attention")
+                )
+            )
 
     def run_stage(
         stage: str,
@@ -158,6 +167,7 @@ def validate_cuda_model(
     version: str,
     prompt_length: int,
     decode_steps: int,
+    replace_linear_attention: bool = False,
 ) -> dict[str, object]:
     if prompt_length <= 0 or decode_steps <= 0:
         raise ValueError("prompt_length and decode_steps must be positive")
@@ -178,7 +188,11 @@ def validate_cuda_model(
     _release(reference_engine)
     del reference_engine
 
-    candidate_engine = load_cuda_engine(settings, version=version)
+    candidate_engine = load_cuda_engine(
+        settings,
+        version=version,
+        replace_linear_attention=replace_linear_attention,
+    )
     candidate = _capture_model_trace(
         candidate_engine,
         input_ids=input_ids,
@@ -208,6 +222,7 @@ def validate_cuda_model(
             "model": settings.model.repo_id,
             "revision": settings.model.revision,
             "candidate": f"cuda-attention-{version}",
+            "custom_linear_attention": replace_linear_attention,
             "prompt_length": prompt_length,
             "decode_steps": decode_steps,
             "atol": settings.compare.logits_atol,

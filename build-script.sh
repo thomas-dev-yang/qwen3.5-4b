@@ -80,7 +80,7 @@ docker run --rm \
     rm -f compile_commands.json
     bear --output compile_commands.json -- \
       uv run --locked python -c \
-      "from cuda_impl.attention import _load_extension; _load_extension()"
+      "from cuda_impl.attention import _load_extension; from cuda_impl.linear_attention import _load_linear_attention_extension; _load_extension(); _load_linear_attention_extension()"
   '
 BUILD_STATUS=$?
 set -e
@@ -100,4 +100,5 @@ fi
 
 echo "Built H100 CUDA extension"
 echo "Compilation database: $ROOT/compile_commands.json"
-echo "Extension output: $EXTENSION_ROOT/qwen35_attention_cuda"
+echo "Attention extension: $EXTENSION_ROOT/qwen35_attention_cuda"
+echo "Gated-delta extension: $EXTENSION_ROOT/qwen35_gated_delta_cuda"

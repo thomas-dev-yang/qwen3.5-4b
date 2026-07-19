@@ -60,7 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--prompt-length", type=int, default=1024)
     benchmark.add_argument("--decode-steps", type=int, default=None)
     benchmark.add_argument(
-        "--attention-version", choices=("v1", "v2", "v3", "v4", "v5"), default="v5"
+        "--attention-version",
+        choices=("v1", "v2", "v3", "v4", "v5", "v6"),
+        default="v6",
     )
     benchmark.add_argument("--output", type=_path, default=None)
 
@@ -68,10 +70,17 @@ def build_parser() -> argparse.ArgumentParser:
         "validate-cuda", help="Trace the custom attention through every Qwen layer"
     )
     validate_cuda.add_argument(
-        "--attention-version", choices=("v1", "v2", "v3", "v4", "v5"), default="v5"
+        "--attention-version",
+        choices=("v1", "v2", "v3", "v4", "v5", "v6"),
+        default="v6",
     )
     validate_cuda.add_argument("--prompt-length", type=int, default=128)
     validate_cuda.add_argument("--decode-steps", type=int, default=4)
+    validate_cuda.add_argument(
+        "--replace-linear-attention",
+        action="store_true",
+        help="Use the custom cached gated-delta step in all 24 linear-attention layers",
+    )
     validate_cuda.add_argument(
         "--output", type=_path, default=_path("artifacts/correctness/cuda-model.json")
     )
@@ -153,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
             version=args.attention_version,
             prompt_length=args.prompt_length,
             decode_steps=args.decode_steps,
+            replace_linear_attention=args.replace_linear_attention,
         )
         rendered = json.dumps(report, indent=2)
         args.output.parent.mkdir(parents=True, exist_ok=True)

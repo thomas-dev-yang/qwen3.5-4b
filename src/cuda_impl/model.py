@@ -5,7 +5,9 @@ from torch import nn
 
 from common.attention import Attention, AttentionSpec
 from common.config import Settings
+from common.gated_delta import gated_delta_spec
 from cuda_impl.attention import CudaAttention
+from cuda_impl.linear_attention import install_cuda_gated_delta_steps
 from hf_impl.model import HuggingFaceTextEngine, load_hf_components
 
 _ATTENTION_BACKEND = "qwen35_cuda"
@@ -53,7 +55,11 @@ class CudaAttentionSandbox(nn.Module):
 
 
 def load_cuda_engine(
-    settings: Settings, *, version: str = "v5", name: str | None = None
+    settings: Settings,
+    *,
+    version: str = "v6",
+    replace_linear_attention: bool = False,
+    name: str | None = None,
 ) -> HuggingFaceTextEngine:
     """Load Qwen and replace its eight full-attention operators with our CUDA kernel."""
     from transformers import AttentionInterface
@@ -79,8 +85,27 @@ def load_cuda_engine(
             f"replaced full-attention layers {replaced_layers}, expected {expected_layers}"
         )
     language_model.config._attn_implementation = _ATTENTION_BACKEND
+    if replace_linear_attention:
+        replaced_linear_layers = install_cuda_gated_delta_steps(
+            language_model, gated_delta_spec(settings.model)
+        )
+        expected_linear_layers = [
+            index
+            for index, layer_type in enumerate(settings.model.layer_types)
+            if layer_type == "linear_attention"
+        ]
+        if replaced_linear_layers != expected_linear_layers:
+            raise RuntimeError(
+                f"replaced linear-attention layers {replaced_linear_layers}, "
+                f"expected {expected_linear_layers}"
+            )
     return HuggingFaceTextEngine(
         language_model,
         lm_head,
-        name=name or f"cuda-attention-{version}",
+        name=name
+        or (
+            f"cuda-attention-{version}-gated-delta"
+            if replace_linear_attention
+            else f"cuda-attention-{version}"
+        ),
     )

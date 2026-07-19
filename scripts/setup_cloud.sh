@@ -9,12 +9,12 @@ if [[ -d .git && -f .gitmodules ]]; then
 fi
 
 if ! command -v nvcc >/dev/null 2>&1; then
-  echo "CUDA 12.8+ is required for the ThunderKittens v5 build" >&2
+  echo "CUDA 12.8+ is required for the ThunderKittens attention build" >&2
   exit 1
 fi
 CUDA_VERSION="$(nvcc --version | sed -n 's/.*release \([0-9][0-9.]*\).*/\1/p' | head -1)"
 if [[ -z "$CUDA_VERSION" ]] || [[ "$(printf '%s\n' "12.8" "$CUDA_VERSION" | sort -V | head -1)" != "12.8" ]]; then
-  echo "CUDA 12.8+ is required for ThunderKittens v5; found ${CUDA_VERSION:-unknown}" >&2
+  echo "CUDA 12.8+ is required for ThunderKittens attention; found ${CUDA_VERSION:-unknown}" >&2
   exit 1
 fi
 

@@ -31,8 +31,8 @@ profile_one() {
   local launch_skip="$WARMUP"
   local launch_count=1
 
-  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" && "$version" != "v4" && "$version" != "v5" ]]; then
-    echo "attention version must be v1, v2, v3, v4, or v5" >&2
+  if [[ "$version" != "v1" && "$version" != "v2" && "$version" != "v3" && "$version" != "v4" && "$version" != "v5" && "$version" != "v6" ]]; then
+    echo "attention version must be v1, v2, v3, v4, v5, or v6" >&2
     return 1
   fi
   if [[ "$mode" != "decode" && "$mode" != "prefill" ]]; then
@@ -62,7 +62,7 @@ profile_one() {
 }
 
 if (( $# == 0 )); then
-  for version in v1 v2 v3 v4 v5; do
+  for version in v1 v2 v3 v4 v5 v6; do
     profile_one "$version" decode 1024
     profile_one "$version" prefill 64
   done

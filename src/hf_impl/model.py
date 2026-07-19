@@ -45,6 +45,23 @@ def validate_checkpoint_config(config, settings: Settings) -> None:
             expected.num_key_value_heads,
         ),
         "head_dim": (actual.head_dim, expected.head_dim),
+        "linear_conv_kernel_dim": (
+            actual.linear_conv_kernel_dim,
+            expected.linear_conv_kernel_dim,
+        ),
+        "linear_key_head_dim": (actual.linear_key_head_dim, expected.linear_key_head_dim),
+        "linear_value_head_dim": (
+            actual.linear_value_head_dim,
+            expected.linear_value_head_dim,
+        ),
+        "linear_num_key_heads": (
+            actual.linear_num_key_heads,
+            expected.linear_num_key_heads,
+        ),
+        "linear_num_value_heads": (
+            actual.linear_num_value_heads,
+            expected.linear_num_value_heads,
+        ),
     }
     failures = [
         f"{name}: got {got!r}, expected {want!r}"

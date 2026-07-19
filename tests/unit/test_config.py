@@ -14,4 +14,9 @@ def test_repository_config_is_qwen35_4b_specific() -> None:
     assert settings.model.num_attention_heads == 16
     assert settings.model.num_key_value_heads == 4
     assert settings.model.head_dim == 256
+    assert settings.model.linear_conv_kernel_dim == 4
+    assert settings.model.linear_key_head_dim == 128
+    assert settings.model.linear_value_head_dim == 128
+    assert settings.model.linear_num_key_heads == 16
+    assert settings.model.linear_num_value_heads == 32
     assert settings.trace.capture_cache == "full"

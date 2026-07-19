@@ -10,7 +10,8 @@ from torch_impl.attention import TorchAttention
 
 pytestmark = pytest.mark.cuda_kernel
 SELECTED_VERSION = os.getenv("QWEN35_ATTENTION_VERSION")
-VERSIONS = (SELECTED_VERSION,) if SELECTED_VERSION else ("v1", "v2", "v3", "v4", "v5")
+VERSIONS = (SELECTED_VERSION,) if SELECTED_VERSION else ("v1", "v2", "v3", "v4", "v5", "v6")
+TILED_VERSIONS = (SELECTED_VERSION,) if SELECTED_VERSION in {"v5", "v6"} else ("v5", "v6")
 
 
 def _assert_close(candidate: torch.Tensor, reference: torch.Tensor) -> None:
@@ -50,10 +51,11 @@ def test_cuda_attention_matches_torch(version: str) -> None:
 
 @pytest.mark.skipif(
     os.getenv("QWEN35_TEST_CUDA_KERNEL") != "1"
-    or (SELECTED_VERSION is not None and SELECTED_VERSION != "v5"),
-    reason="requires the v5 CUDA attention kernel",
+    or (SELECTED_VERSION is not None and SELECTED_VERSION not in {"v5", "v6"}),
+    reason="requires a tiled ThunderKittens attention kernel",
 )
-def test_cuda_attention_v5_handles_tile_boundaries() -> None:
+@pytest.mark.parametrize("version", TILED_VERSIONS)
+def test_cuda_attention_handles_tile_boundaries(version: str) -> None:
     torch.manual_seed(17)
     spec = full_attention_spec(load_settings().model)
     query_tokens = 65
@@ -71,18 +73,19 @@ def test_cuda_attention_v5_handles_tile_boundaries() -> None:
     )[None, None]
 
     reference = TorchAttention(spec).forward(query, key, value, mask)
-    candidate = CudaAttention(spec, version="v5").forward(query, key, value, mask)
+    candidate = CudaAttention(spec, version=version).forward(query, key, value, mask)
 
     _assert_close(candidate, reference)
 
 
 @pytest.mark.skipif(
     os.getenv("QWEN35_TEST_CUDA_KERNEL") != "1"
-    or (SELECTED_VERSION is not None and SELECTED_VERSION != "v5"),
-    reason="requires the v5 CUDA attention kernel",
+    or (SELECTED_VERSION is not None and SELECTED_VERSION not in {"v5", "v6"}),
+    reason="requires a tiled ThunderKittens attention kernel",
 )
+@pytest.mark.parametrize("version", TILED_VERSIONS)
 @pytest.mark.parametrize("key_tokens", (127, 128, 129, 1024, 1025))
-def test_cuda_attention_v5_decode_lengths(key_tokens: int) -> None:
+def test_cuda_attention_decode_lengths(version: str, key_tokens: int) -> None:
     torch.manual_seed(23 + key_tokens)
     spec = full_attention_spec(load_settings().model)
     query = torch.randn(1, 16, 1, 256, device="cuda", dtype=torch.bfloat16)
@@ -90,17 +93,18 @@ def test_cuda_attention_v5_decode_lengths(key_tokens: int) -> None:
     value = torch.randn_like(key)
 
     reference = TorchAttention(spec).forward(query, key, value, None)
-    candidate = CudaAttention(spec, version="v5").forward(query, key, value, None)
+    candidate = CudaAttention(spec, version=version).forward(query, key, value, None)
 
     _assert_close(candidate, reference)
 
 
 @pytest.mark.skipif(
     os.getenv("QWEN35_TEST_CUDA_KERNEL") != "1"
-    or (SELECTED_VERSION is not None and SELECTED_VERSION != "v5"),
-    reason="requires the v5 CUDA attention kernel",
+    or (SELECTED_VERSION is not None and SELECTED_VERSION not in {"v5", "v6"}),
+    reason="requires a tiled ThunderKittens attention kernel",
 )
-def test_cuda_attention_v5_prefill_1024() -> None:
+@pytest.mark.parametrize("version", TILED_VERSIONS)
+def test_cuda_attention_prefill_1024(version: str) -> None:
     torch.manual_seed(29)
     spec = full_attention_spec(load_settings().model)
     tokens = 1024
@@ -113,6 +117,6 @@ def test_cuda_attention_v5_prefill_1024() -> None:
     )
 
     reference = TorchAttention(spec).forward(query, key, value, mask)
-    candidate = CudaAttention(spec, version="v5").forward(query, key, value, mask)
+    candidate = CudaAttention(spec, version=version).forward(query, key, value, mask)
 
     _assert_close(candidate, reference)

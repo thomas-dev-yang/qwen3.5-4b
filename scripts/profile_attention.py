@@ -11,7 +11,7 @@ from cuda_impl.attention import CudaAttention
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", choices=("v1", "v2", "v3", "v4", "v5"), default="v1")
+    parser.add_argument("--version", choices=("v1", "v2", "v3", "v4", "v5", "v6"), default="v1")
     parser.add_argument("--mode", choices=("decode", "prefill"), default="decode")
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--tokens", type=int)

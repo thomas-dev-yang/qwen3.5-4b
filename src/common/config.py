@@ -20,6 +20,11 @@ class ModelSettings:
     num_attention_heads: int
     num_key_value_heads: int
     head_dim: int
+    linear_conv_kernel_dim: int
+    linear_key_head_dim: int
+    linear_value_head_dim: int
+    linear_num_key_heads: int
+    linear_num_value_heads: int
 
     def __post_init__(self) -> None:
         if tuple(sorted(set(self.full_attention_layers))) != self.full_attention_layers:

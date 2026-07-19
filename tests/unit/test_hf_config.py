@@ -18,6 +18,11 @@ def _checkpoint_config(hidden_size: int | None = None):
         num_attention_heads=model.num_attention_heads,
         num_key_value_heads=model.num_key_value_heads,
         head_dim=model.head_dim,
+        linear_conv_kernel_dim=model.linear_conv_kernel_dim,
+        linear_key_head_dim=model.linear_key_head_dim,
+        linear_value_head_dim=model.linear_value_head_dim,
+        linear_num_key_heads=model.linear_num_key_heads,
+        linear_num_value_heads=model.linear_num_value_heads,
     )
     return SimpleNamespace(model_type=model.model_type, text_config=text_config)
 
